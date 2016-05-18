@@ -27,5 +27,6 @@ Pod::Spec.new do |s|
   s.source_files   = "FBSDKMessengerShareKit/FBSDKMessengerShareKit/**/*.{h,m}"
   s.public_header_files = "FBSDKMessengerShareKit/FBSDKMessengerShareKit/*.{h}"
   s.header_dir = "FBSDKMessengerShareKit"
+  s.ios.dependency 'FBSDKCoreKit', '~> 4.11'
 
 end

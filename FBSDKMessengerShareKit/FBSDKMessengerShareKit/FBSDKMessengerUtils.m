@@ -17,19 +17,20 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #import "FBSDKMessengerUtils.h"
+#import <FBSDKCoreKit/FBSDKSettings.h>
 
 // Keys to get App-specific info from mainBundle
 static NSString *const FBPLISTAppIDKey = @"FacebookAppID";
 
 NSString *FBSDKMessengerDefaultAppID(void)
 {
-  static NSString *defaultAppId = nil;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    defaultAppId = [[[NSBundle mainBundle] objectForInfoDictionaryKey:FBPLISTAppIDKey] copy];
-  });
+//  static NSString *defaultAppId = nil;
+//  static dispatch_once_t onceToken;
+//  dispatch_once(&onceToken, ^{
+//    defaultAppId = [[[NSBundle mainBundle] objectForInfoDictionaryKey:FBPLISTAppIDKey] copy];
+//  });
 
-  return defaultAppId;
+  return [FBSDKSettings appID];
 }
 
 NSString *FBSDKMessengerDefaultAppIDURLScheme(void)
