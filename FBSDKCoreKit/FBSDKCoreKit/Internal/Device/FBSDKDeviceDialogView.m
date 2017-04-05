@@ -29,7 +29,7 @@
 - (instancetype)initWithFrame:(CGRect)frame
 {
   if ((self = [super initWithFrame:frame])) {
-    [self _buildView];
+    [self buildView];
     [self setNeedsUpdateConstraints];
   }
   return self;
@@ -54,7 +54,7 @@
 
 #pragma mark - Helpers
 
-- (void)_buildView
+- (void)buildView
 {
   // This is a "static" view with just a cancel button so add all the constraints here
   // rather than properly override `updateConstraints`.
@@ -133,7 +133,7 @@
   NSString *localizedFormatString = NSLocalizedStringWithDefaultValue(@"DeviceLogin.LogInPrompt",
                                                                       @"FacebookSDK",
                                                                       [FBSDKInternalUtility bundleForStrings],
-                                                                      @"Visit %@ on your smartphone or computer and enter the above code.",
+                                                                      @"Visit %@ and enter your code.",
                                                                       @"The format string for device login instructions");
   NSString *const deviceLoginURLString = @"facebook.com/device";
   NSString *instructionString = [NSString localizedStringWithFormat:localizedFormatString, deviceLoginURLString];
@@ -160,8 +160,8 @@
   buttonContainerView.translatesAutoresizingMaskIntoConstraints = NO;
   [dialogView addSubview:buttonContainerView];
   [NSLayoutConstraint constraintWithItem:buttonContainerView attribute:NSLayoutAttributeCenterX relatedBy:NSLayoutRelationEqual toItem:dialogView attribute:NSLayoutAttributeCenterX multiplier:1.0 constant:0].active = YES;
-  [buttonContainerView.topAnchor constraintEqualToAnchor:instructionLabel.bottomAnchor
-                                                constant:96].active = YES;
+
+  [buttonContainerView.heightAnchor constraintEqualToConstant:100].active = YES;
   [buttonContainerView.leadingAnchor constraintEqualToAnchor:dialogView.leadingAnchor
                                                     constant:400].active = YES;
   [dialogView.trailingAnchor constraintEqualToAnchor:buttonContainerView.trailingAnchor
