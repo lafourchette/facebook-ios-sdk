@@ -38,7 +38,14 @@ FB_SDK_BUILD_PACKAGE_SAMPLES=$FB_SDK_BUILD_PACKAGE/Samples
 FB_SDK_BUILD_PACKAGE_SCRIPTS=$FB_SDK_BUILD/Scripts
 FB_SDK_BUILD_PACKAGE_DOCSETS_FOLDER=$FB_SDK_BUILD_PACKAGE/DocSets/
 
-# -----------------------------------------------------------------------------gi
+# -----------------------------------------------------------------------------
+# Install required dependencies
+#
+(gem list naturally -i > /dev/null) || die "Run 'gem install naturally' first"
+(gem list xcpretty -i > /dev/null) || die "Run 'gem install xcpretty' first"
+(gem list rake -i > /dev/null) || die "Run 'gem install rake' first"
+
+# -----------------------------------------------------------------------------
 # Build package directory structure
 #
 progress_message "Building package directory structure."
@@ -72,7 +79,7 @@ echo Building Distribution.
   || die "Could not copy Bolts.framework"
 \cp -R $"$FB_SDK_ROOT"/FacebookSDKStrings.bundle "$FB_SDK_BUILD_PACKAGE" \
   || die "Could not copy FacebookSDKStrings.bundle"
-for SAMPLE in Configurations AccountKitSample Iconicus RPSSample Scrumptious ShareIt SwitchUserSample; do
+for SAMPLE in Configurations Iconicus RPSSample Scrumptious ShareIt SwitchUserSample; do
   \rsync -avmc --exclude "${SAMPLE}.xcworkspace" "$FB_SDK_SAMPLES/$SAMPLE" "$FB_SDK_BUILD_PACKAGE_SAMPLES" \
     || die "Could not copy $SAMPLE"
 done
@@ -80,7 +87,6 @@ done
   || die "Could not copy README"
 \cp "$FB_SDK_ROOT/LICENSE" "$FB_SDK_BUILD_PACKAGE"/LICENSE.txt \
   || die "Could not copy LICENSE"
-
 
 # -----------------------------------------------------------------------------
 # Fixup projects to point to the SDK framework
@@ -98,7 +104,7 @@ done
 # Build AKFAccountKit framework
 #
 if [ -z $SKIPBUILD ]; then
-  ("$XCTOOL" -project "${FB_SDK_ROOT}"/AccountKit/AccountKit.xcodeproj -scheme "AccountKit-Universal" -configuration Release clean build) || die "Failed to build account kit"
+  (xcodebuild -project "${FB_SDK_ROOT}"/AccountKit/AccountKit.xcodeproj -scheme "AccountKit-Universal" -configuration Release clean build) || die "Failed to build account kit"
 fi
 \cp -R "$FB_SDK_BUILD"/AccountKit.framework "$FB_SDK_BUILD_PACKAGE" \
   || die "Could not copy AccountKit.framework"
@@ -108,24 +114,32 @@ fi
 # -----------------------------------------------------------------------------
 # Build FBNotifications framework
 #
-\unzip "$FB_SDK_ROOT/internal/FBNotifications-iOS.zip" -d $FB_SDK_BUILD
+
+# Build stuff
+\rake -f "$FB_SDK_ROOT/FBNotifications/iOS/Rakefile" package:frameworks || die "Could not build FBNotifications.framework"
+\unzip "$FB_SDK_ROOT/FBNotifications/iOS/build/release/FBNotifications-iOS.zip" -d $FB_SDK_BUILD
 \cp -R "$FB_SDK_BUILD"/FBNotifications.framework "$FB_SDK_BUILD_PACKAGE" \
   || die "Could not copy FBNotifications.framework"
 
 # -----------------------------------------------------------------------------
 # Build FBAudienceNetwork framework
 #
-(
-  if [ -z $SKIPBUILD ]; then
-    . "$FB_SDK_ROOT/internal/scripts/build_workspace.sh" -c Release "$FB_SDK_ROOT/ads/src/FBAudienceNetwork.xcworkspace"
-  fi
-) || die "Failed to build FBAudienceNetwork"
+
+if [ -z $SKIPBUILD ]; then
+  (xcodebuild -workspace "${FB_SDK_ROOT}"/ads/src/FBAudienceNetwork.xcworkspace -scheme "BuildAll-Universal" -configuration Release clean build) || die "Failed to build FBAudienceNetwork"
+fi
 FBAN_SAMPLES=$FB_SDK_BUILD_PACKAGE/Samples/FBAudienceNetwork
-\cp -R "$FB_SDK_ROOT"/ads/build/FBAudienceNetwork.framework "$FB_SDK_BUILD_PACKAGE" \
+\rsync -avmc "$FB_SDK_ROOT"/ads/build/FBAudienceNetwork.framework "$FB_SDK_BUILD_PACKAGE" \
   || die "Could not copy FBAudienceNetwork.framework"
 \mkdir -p "$FB_SDK_BUILD_PACKAGE/Samples/FBAudienceNetwork"
-\cp -R "$FB_SDK_ROOT"/ads/samples/ $FBAN_SAMPLES \
+\rsync -avmc "$FB_SDK_ROOT"/ads/samples/ "$FBAN_SAMPLES" \
   || die "Could not copy FBAudienceNetwork samples"
+# Fix up samples
+for fname in $(find "$FBAN_SAMPLES" -name "project.pbxproj" -print); do \
+  sed 's|"\\"\$(SRCROOT)/\.\./\.\./\.\./build\\"",||g;s|\.\./\.\./\.\./build||g;' \
+    ${fname} > ${fname}.tmpfile  && mv ${fname}.tmpfile ${fname}; \
+done
+
 # Fix up samples
 for fname in $(find "$FBAN_SAMPLES" -name "project.pbxproj" -print); do \
   sed "s|../../build|../../../|g;" \
@@ -138,11 +152,33 @@ for fname in $(find "$FBADSDK_SAMPLES" -name "project.pbxproj" -print); do \
     ${fname} > ${fname}.tmpfile  && mv ${fname}.tmpfile ${fname}; \
 done
 
+LANG=C
+
+# Remove all BUCK related files from AN samples
+find "$FBAN_SAMPLES" -name "BUCK" -delete
+find "$FBAN_SAMPLES" -name "build-buck.sh" -delete
+find "$FBAN_SAMPLES" -name "Buck-Info.plist" -delete
+find "$FBAN_SAMPLES" -name "Entitlements" -type d -exec rm -r "{}" \;
+
+find "$FBAN_SAMPLES" -name "entitlements.plist" -delete
+
+find "$FBAN_SAMPLES" -name "Info.plist" -exec perl -p -i -0777 -e 's/\s*<key>CFBundleURLTypes<\/key>\s*<array>\s*<dict>\s*<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>fb\d*<\/string>\s*<\/array>\s*<\/dict>\s*<\/array>\s*<key>FacebookAppID<\/key>\s*<string>\d*<\/string>\s*<key>FacebookDisplayName<\/key>\s*<string>.*<\/string>\s*<key>LSApplicationQueriesSchemes<\/key>\s*<array>\s*<string>fbapi<\/string>\s*<string>fb-messenger-api<\/string>\s*<string>fbauth2<\/string>\s*<string>fbshareextension<\/string>\s*<\/array>\n//g' {} \;
+find "$FBAN_SAMPLES" -name "project.pbxproj" -exec perl -p -i -0777 -e 's/\n\s*com\.apple\.Keychain = {\s*enabled = 1;\s*};//gms' {} \;
+find "$FBAN_SAMPLES" -name "project.pbxproj" -exec perl -p -i -0777 -e '/NativeAdSample.entitlements/d' {} \;
+find "$FBAN_SAMPLES" -name "project.pbxproj" -exec perl -p -i -0777 -e '/AdUnitsSample.entitlements/d' {} \;
+find "$FBAN_SAMPLES" -name "project.pbxproj" -exec perl -p -i -0777 -e 's/^\s*<FileRef\n\s*location = "group:\.\.\/\.\.\/FBSDKCoreKit\/FBSDKCoreKit\.xcodeproj">\n\s*<\/FileRef>\n//gms' {} \;
+
+find "$FBAN_SAMPLES" -type f -exec sed -i '' -E -e "/fbLoginButton/d" {} \;
+find "$FBAN_SAMPLES" -type f -exec sed -i '' -E -e "/FBSDKCoreKit/d" {} \;
+find "$FBAN_SAMPLES" -type f -exec sed -i '' -E -e "/FBSDKLogin/d" {} \;
+find "$FBAN_SAMPLES" -type f -exec sed -i '' -E -e "/FBSDKApplicationDelegate/d" {} \;
+find "$FBAN_SAMPLES" -type f -exec  perl -p -i -0777 -e 's/\n\/\/ START REMOVED AT DISTRIBUTION BUILD TIME.*?\/\/ END REMOVED AT DISTRIBUTION BUILD TIME\n//gms' {} \;
+
 # -----------------------------------------------------------------------------
 # Build Messenger Kit
 #
 if [ -z $SKIPBUILD ]; then
-  ("$XCTOOL" -project "${FB_SDK_ROOT}"/FBSDKMessengerShareKit/FBSDKMessengerShareKit.xcodeproj -scheme "FBSDKMessengerShareKit-universal" -configuration Release clean build) || die "Failed to build messenger kit"
+  (xcodebuild -project "${FB_SDK_ROOT}"/FBSDKMessengerShareKit/FBSDKMessengerShareKit.xcodeproj -scheme "FBSDKMessengerShareKit-universal" -configuration Release clean build) || die "Failed to build messenger kit"
 fi
 \cp -R "$FB_SDK_BUILD"/FBSDKMessengerShareKit.framework "$FB_SDK_BUILD_PACKAGE" \
   || die "Could not copy FBSDKMessengerShareKit.framework"
